@@ -1,7 +1,7 @@
 # Megatech Vulkan Dispatch Python Tools
 
-The script used to generate headers for `libmegatech-vulkan-dispatch` is a stand-alone component. Although my
-intention is that client software links with the library, there's no need to do so. Actually, the generator doesn't
+The script used to generate headers for [`libmegatech-vulkan-dispatch`](https://github.com/gn0mesort/megatech-vulkan-dispatch) is a stand-alone component. Although my
+intention is that client software links with that library, there's no need to do so. Actually, the generator doesn't
 even need to be used to create <span class="nowrap">C++</span> headers.
 
 The `dispatch-table-generator` script simply accepts a [Mako](https://www.makotemplates.org/) template as input. The
@@ -22,3 +22,13 @@ For more information on how to run `dispatch-table-generator`, use:
 ```sh
 dispatch-table-generator --help
 ```
+
+## Generating Documentation
+
+Documentation files can be generated using [Doxygen](https://www.doxygen.nl/). Just run:
+
+```sh
+doxygen Doxyfile
+```
+
+The resulting documentation is located at `build/documentation/`.
