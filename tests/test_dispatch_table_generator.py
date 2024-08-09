@@ -398,7 +398,6 @@ class TestVulkanSpecification(unittest.TestCase):
                 count += 1
         self.assertEqual(count, 2)
 
-
 class TestDispatchTableGenerator(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp_dir = Path(tempfile.mkdtemp(prefix=TEMPORARY_PREFIX))
