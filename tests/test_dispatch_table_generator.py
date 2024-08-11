@@ -3,7 +3,9 @@
 import unittest
 import tempfile
 import os
+import contextlib
 
+from io import StringIO
 from pathlib import Path
 
 from defusedxml import ElementTree
@@ -19,6 +21,8 @@ TEMPORARY_SPEC = """
             <command name="vkGetInstanceProcAddr"/>
         </require>
     </feature>
+    <feature api="vulkan,vulkansc" name="VK_VERSION_1_1" number="1.1" comment="Vulkan core API interface definitions">
+    </feature>
     <feature api="vulkan,vulkansc" name="VK_VERSION_1_2" number="1.2" comment="Vulkan 1.2 core API interface definitions.">
         <require comment="Promoted from VK_EXT_host_query_reset (extension 262)">
     <command name="vkResetQueryPool"/>
@@ -29,6 +33,8 @@ TEMPORARY_SPEC = """
             <require>
                 <enum value="25" name="VK_KHR_SURFACE_SPEC_VERSION"/>
                 <command name="vkDestroySurfaceKHR"/>
+            </require>
+            <require depends="(((VK_KHR_get_physical_device_properties2,VK_VERSION_1_1)+VK_KHR_synchronization2),VK_VERSION_1_3)+VK_KHR_pipeline_library+VK_KHR_spirv_1_4">
             </require>
         </extension>
         <extension name="VK_EXT_host_query_reset" number="262" author="EXT" contact="Bas Nieuwenhuizen @BNieuwenhuizen" supported="vulkan" type="device" depends="VK_KHR_get_physical_device_properties2,VK_VERSION_1_1" promotedto="VK_VERSION_1_2">
@@ -43,6 +49,8 @@ TEMPORARY_SPEC = """
                 <command name="vkDebugReportMessageEXT"/>
             </require>
         </extension>
+       <extension name="VK_KHR_get_physical_device_properties2" number="60" type="instance" author="KHR" contact="Jeff Bolz @jeffbolznv" supported="vulkan" promotedto="VK_VERSION_1_1" ratified="vulkan">
+       </extension>
     </extensions>
     <commands comment="Vulkan command definitions">
         <command>
@@ -129,6 +137,90 @@ EVIL_SPEC_MISSING_ALIAS = """
 </registry>
 """.strip()
 
+EVIL_SPEC_BAD_DEPENDENCY = """
+<?xml version="1.0" encoding="UTF-8"?>
+<registry>
+    <feature api="vulkan,vulkansc" name="VK_VERSION_1_0" number="1.0" comment="Vulkan core API interface definitions">
+        <require comment="Device initialization">
+            <command name="vkGetInstanceProcAddr"/>
+        </require>
+    </feature>
+    <extensions>
+        <extension name="VK_KHR_surface" number="1" type="instance" author="KHR" contact="James Jones @cubanismo,Ian Elliott @ianelliottus" supported="vulkan,vulkansc" ratified="vulkan,vulkansc" depends="VK_KHR_doesnt_exist">
+        </extension>
+    </extensions>
+    <commands comment="Vulkan command definitions">
+        <command>
+            <proto><type>PFN_vkVoidFunction</type> <name>vkGetInstanceProcAddr</name></proto>
+            <param optional="true"><type>VkInstance</type> <name>instance</name></param>
+            <param len="null-terminated">const <type>char</type>* <name>pName</name></param>
+        </command>
+    </commands>
+    <types comment="Vulkan type definitions">
+        <type api="vulkan" category="define">// Version of this file
+        #define <name>VK_HEADER_VERSION</name> 12246445</type>
+    </types>
+</registry>
+""".strip()
+
+EVIL_SPEC_BAD_FEATURE_DEPENDENCY = """
+<?xml version="1.0" encoding="UTF-8"?>
+<registry>
+    <feature api="vulkan,vulkansc" name="VK_VERSION_1_0" number="1.0" comment="Vulkan core API interface definitions" depends="VK_VERSION_0_125">
+        <require comment="Device initialization">
+            <command name="vkGetInstanceProcAddr"/>
+        </require>
+    </feature>
+    <extensions>
+        <extension name="VK_KHR_surface" number="1" type="instance" author="KHR" contact="James Jones @cubanismo,Ian Elliott @ianelliottus" supported="vulkan,vulkansc" ratified="vulkan,vulkansc">
+        </extension>
+    </extensions>
+    <commands comment="Vulkan command definitions">
+        <command>
+            <proto><type>PFN_vkVoidFunction</type> <name>vkGetInstanceProcAddr</name></proto>
+            <param optional="true"><type>VkInstance</type> <name>instance</name></param>
+            <param len="null-terminated">const <type>char</type>* <name>pName</name></param>
+        </command>
+    </commands>
+    <types comment="Vulkan type definitions">
+        <type api="vulkan" category="define">// Version of this file
+        #define <name>VK_HEADER_VERSION</name> 12246445</type>
+    </types>
+</registry>
+""".strip()
+
+
+NEUTRAL_SPEC_BAD_REQUIREMENT_DEPENDENCY = """
+<?xml version="1.0" encoding="UTF-8"?>
+<registry>
+    <feature api="vulkan,vulkansc" name="VK_VERSION_1_0" number="1.0" comment="Vulkan core API interface definitions">
+        <require comment="Device initialization">
+            <command name="vkGetInstanceProcAddr"/>
+        </require>
+    </feature>
+    <extensions>
+        <extension name="VK_KHR_surface" number="1" type="instance" author="KHR" contact="James Jones @cubanismo,Ian Elliott @ianelliottus" supported="vulkan,vulkansc" ratified="vulkan,vulkansc">
+            <require depends="VK_KHR_doesnt_exist">
+                <command name="vkGetInstanceProcAddr" />
+            </require>
+            <require depends="VK_KHR_doesnt_exist">
+            </require>
+        </extension>
+    </extensions>
+    <commands comment="Vulkan command definitions">
+        <command>
+            <proto><type>PFN_vkVoidFunction</type> <name>vkGetInstanceProcAddr</name></proto>
+            <param optional="true"><type>VkInstance</type> <name>instance</name></param>
+            <param len="null-terminated">const <type>char</type>* <name>pName</name></param>
+        </command>
+    </commands>
+    <types comment="Vulkan type definitions">
+        <type api="vulkan" category="define">// Version of this file
+        #define <name>VK_HEADER_VERSION</name> 12246445</type>
+    </types>
+</registry>
+""".strip()
+
 TEMPORARY_PREFIX = "test-dispatch-table-generator-"
 
 def tmpfile(dir: Path = None) -> Path:
@@ -177,12 +269,11 @@ class TestVulkanVersion(unittest.TestCase):
 
 class TestVulkanCommand(unittest.TestCase):
     def setUp(self) -> None:
-        self._tree = ElementTree.fromstring(TEMPORARY_SPEC)
+        self.__tree = ElementTree.fromstring(TEMPORARY_SPEC)
     def test_init_should_fail_if_parameters_are_none(self) -> None:
-        tree = self._tree
-        node = tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
+        node = self.__tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
         with self.assertRaises(ValueError):
-            VulkanCommand(tree, None)
+            VulkanCommand(self.__tree, None)
         with self.assertRaises(ValueError):
             VulkanCommand(None, node)
     def test_init_should_fail_if_command_doesnt_have_a_name(self) -> None:
@@ -206,15 +297,13 @@ class TestVulkanCommand(unittest.TestCase):
         with self.assertRaises(ValueError):
             VulkanCommand(tree, node)
     def test_init_should_locate_aliased_commands(self) -> None:
-        tree = self._tree
-        node = tree.find("commands/command[@name='vkResetQueryPoolEXT']")
-        cmd = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command[@name='vkResetQueryPoolEXT']")
+        cmd = VulkanCommand(self.__tree, node)
         self.assertEqual(cmd.name(), "vkResetQueryPoolEXT")
         self.assertEqual(cmd.level(), VulkanCommandLevel.DEVICE)
     def test_init_should_handle_regular_commands(self) -> None:
-        tree = self._tree
-        node = tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
-        cmd = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
+        cmd = VulkanCommand(self.__tree, node)
         self.assertEqual(cmd.name(), "vkGetInstanceProcAddr")
         self.assertEqual(cmd.level(), VulkanCommandLevel.GLOBAL)
 
@@ -233,74 +322,128 @@ class TestVulkanCommandSet(unittest.TestCase):
         cmd_set.add(cmds[2])
         return (cmd_set, cmds)
     def setUp(self) -> None:
-        self._tree = ElementTree.fromstring(TEMPORARY_SPEC)
+        self.__tree = ElementTree.fromstring(TEMPORARY_SPEC)
     def test_add_should_insert_at_correct_level(self) -> None:
-        tree = self._tree
-        node = tree.find("commands/command[@name='vkResetQueryPoolEXT']")
-        cmd = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command[@name='vkResetQueryPoolEXT']")
+        cmd = VulkanCommand(self.__tree, node)
         cmd_set = VulkanCommandSet()
         cmd_set.add(cmd)
         self.assertEqual(len(cmd_set.device_commands()), 1)
-        node = tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
-        cmd = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
+        cmd = VulkanCommand(self.__tree, node)
         cmd_set.add(cmd)
         self.assertEqual(len(cmd_set.global_commands()), 1)
-        node = tree.find("commands/command/proto/name[.='vkDestroySurfaceKHR']/../..")
-        cmd = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command/proto/name[.='vkDestroySurfaceKHR']/../..")
+        cmd = VulkanCommand(self.__tree, node)
         cmd_set.add(cmd)
         self.assertEqual(len(cmd_set.instance_commands()), 1)
     def test_remove_should_be_a_noop_if_command_not_in_set(self) -> None:
-        tree = self._tree
-        node = tree.find("commands/command[@name='vkResetQueryPoolEXT']")
-        reset_query_pool = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command[@name='vkResetQueryPoolEXT']")
+        reset_query_pool = VulkanCommand(self.__tree, node)
         cmd_set = VulkanCommandSet()
         cmd_set.add(reset_query_pool)
-        node = tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
-        get_instance_proc_addr = VulkanCommand(tree, node)
+        node = self.__tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
+        get_instance_proc_addr = VulkanCommand(self.__tree, node)
         cmd_set.remove(get_instance_proc_addr)
         self.assertIn(reset_query_pool, cmd_set)
     def test_remove_should_remove_from_underlying_sets(self) -> None:
-        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self._tree)
+        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self.__tree)
         for cmd in cmds:
             cmd_set.remove(cmd)
         self.assertTrue(cmd_set.empty())
     def test_contains_should_find_added_commands(self) -> None:
-        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self._tree)
+        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self.__tree)
         for cmd in cmds:
             self.assertTrue(cmd in cmd_set)
     def test_len_should_be_the_sum_of_set_lens(self) -> None:
-        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self._tree)
+        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self.__tree)
         total = len(cmd_set.global_commands()) + len(cmd_set.instance_commands()) + len(cmd_set.device_commands())
         self.assertEqual(len(cmd_set), total)
+    def test_find_should_retrieve_commands(self) -> None:
+        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self.__tree)
+        node = self.__tree.find("commands/command/proto/name[.='vkGetInstanceProcAddr']/../..")
+        cmd = VulkanCommand(self.__tree, node)
+        self.assertEqual(cmd, cmd_set.find("vkGetInstanceProcAddr"))
+    def test_find_should_retrieve_none_for_unknown_commands(self) -> None:
+        (cmd_set, cmds) = TestVulkanCommandSet._prep_command_set(self.__tree)
+        self.assertIsNone(cmd_set.find("vkNotAVulkanCommand"))
+
+class TestVulkanRequirement(unittest.TestCase):
+    def setUp(self) -> None:
+        self.__tree = ElementTree.fromstring(TEMPORARY_SPEC)
+        self.__commands = { }
+        for node in self.__tree.findall("commands/command"):
+            parsed = VulkanCommand(self.__tree, node)
+            self.__commands[parsed.name()] = parsed
+    def test_init_should_fail_with_no_node(self) -> None:
+        with self.assertRaises(ValueError):
+            VulkanRequirement(None, self.__commands)
+    def test_init_should_fail_with_no_commands(self) -> None:
+        with self.assertRaises(ValueError):
+            VulkanRequirement(self.__tree.find(".//require"), None)
+    def test_dependency_satisfaction(self) -> None:
+        node = self.__tree.find(".//require[@depends]")
+        requirement = VulkanRequirement(node, self.__commands)
+        self.assertFalse(requirement.is_satisfied(None))
+        self.assertFalse(requirement.is_satisfied({}))
+        features = { "VK_VERSION_1_0", "VK_VERSION_1_1", "VK_KHR_synchronization2", "VK_KHR_pipeline_library",
+                    "VK_KHR_spirv_1_4" }
+        self.assertTrue(requirement.is_satisfied(features))
+    def test_header_guard_should_match_expected_guard(self) -> None:
+        node = self.__tree.find(".//require[@depends]")
+        requirement = VulkanRequirement(node, self.__commands)
+        guard = "(((defined(VK_KHR_get_physical_device_properties2) || defined(VK_VERSION_1_1)) && defined(VK_KHR_synchronization2)) || defined(VK_VERSION_1_3)) && defined(VK_KHR_pipeline_library) && defined(VK_KHR_spirv_1_4)"
+        self.assertEqual(guard, requirement.to_header_guard())
 
 class TestVulkanFeature(unittest.TestCase):
     def setUp(self) -> None:
-        self._tree = ElementTree.fromstring(TEMPORARY_SPEC)
+        self.__tree = ElementTree.fromstring(TEMPORARY_SPEC)
+        self.__commands = { }
+        for node in self.__tree.findall("commands/command"):
+            parsed = VulkanCommand(self.__tree, node)
+            self.__commands[parsed.name()] = parsed
+    def __find_in_any_requirement(self, name: str, feature: VulkanFeature) -> bool:
+        for requirement in feature.requirements():
+            if self.__commands[name] in requirement.commands():
+                return True
+        return False
     def test_init_should_fail_if_node_tag_is_not_feature_or_extension(self) -> None:
         with self.assertRaises(ValueError):
-            VulkanFeature(self._tree.find("commands/command"))
+            VulkanFeature(self.__tree.find("commands/command"), self.__commands)
     def test_init_should_support_features(self) -> None:
-        node = self._tree.find("feature")
-        feature = VulkanFeature(node)
+        node = self.__tree.find("feature")
+        feature = VulkanFeature(node, self.__commands)
         self.assertEqual(feature.name(), "VK_VERSION_1_0")
         self.assertEqual(feature.version(), VulkanVersion("1.0"))
         self.assertEqual(feature.supported_apis(), set([ "vulkan", "vulkansc" ]))
-        self.assertIn("vkGetInstanceProcAddr", feature.commands())
+        self.assertTrue(self.__find_in_any_requirement("vkGetInstanceProcAddr", feature))
         self.assertEqual(len(feature.removals()), 0)
         self.assertFalse(feature.enabled())
     def test_init_should_support_extensions(self) -> None:
-        node = self._tree.find("extensions/extension")
-        feature = VulkanFeature(node)
+        node = self.__tree.find("extensions/extension")
+        feature = VulkanFeature(node, self.__commands)
         self.assertEqual(feature.name(), "VK_KHR_surface")
         self.assertEqual(feature.version(), VulkanVersion("25.0"))
         self.assertEqual(feature.supported_apis(), set([ "vulkan", "vulkansc" ]))
-        self.assertIn("vkDestroySurfaceKHR", feature.commands())
+        self.assertTrue(self.__find_in_any_requirement("vkDestroySurfaceKHR", feature))
         self.assertEqual(len(feature.removals()), 0)
         self.assertFalse(feature.enabled())
     def test_init_should_recognize_deprecated_features(self) -> None:
-        node = self._tree.find("extensions/extension[@name='VK_EXT_debug_report']")
-        feature = VulkanFeature(node)
+        node = self.__tree.find("extensions/extension[@name='VK_EXT_debug_report']")
+        feature = VulkanFeature(node, self.__commands)
         self.assertTrue(feature.deprecated())
+    def test_dependency_satisfaction(self) -> None:
+        node = self.__tree.find(".//extension[@name='VK_EXT_host_query_reset']")
+        feature = VulkanFeature(node, self.__commands)
+        self.assertFalse(feature.is_satisfied(None))
+        self.assertFalse(feature.is_satisfied({}))
+        features = { "VK_KHR_physical_device_properties2", "VK_VERSION_1_1", "VK_VERSION_1_0" }
+        self.assertTrue(feature.is_satisfied(features))
+    def test_header_guard_should_match_expected_guard(self) -> None:
+        node = self.__tree.find(".//extension[@name='VK_EXT_host_query_reset']")
+        feature = VulkanFeature(node, self.__commands)
+        guard = "defined(VK_KHR_get_physical_device_properties2) || defined(VK_VERSION_1_1)"
+        self.assertEqual(guard, feature.to_header_guard())
 
 class TestVulkanSpecification(unittest.TestCase):
     def setUp(self) -> None:
@@ -316,8 +459,8 @@ class TestVulkanSpecification(unittest.TestCase):
     def test_init_should_handle_latest_version_specifier(self) -> None:
         spec = VulkanSpecification(self._tmp_spec, "vulkan", "latest", set())
         latest = VulkanVersion("0.0")
-        for name in spec.apis():
-            api = spec.apis()[name]
+        for name in spec.features():
+            api = spec.features()[name]
             if api.version() > latest and api.enabled():
                 latest = api.version()
         self.assertEqual(latest, VulkanVersion("1.2"))
@@ -338,12 +481,12 @@ class TestVulkanSpecification(unittest.TestCase):
         self.assertIsNotNone(spec.specification_path())
     def test_init_should_only_enable_requested_features(self) -> None:
         spec = VulkanSpecification(self._tmp_spec, "vulkan", "1.0", set([ "VK_KHR_surface" ]))
-        for name in spec.apis():
-            api = spec.apis()[name]
+        for name in spec.features():
+            feature = spec.features()[name]
             if name == "VK_VERSION_1_0":
-                self.assertTrue(api.enabled())
+                self.assertTrue(feature.enabled())
             else:
-                self.assertFalse(api.enabled())
+                self.assertFalse(feature.enabled())
         for name in spec.extensions():
             extension = spec.extensions()[name]
             if name == "VK_KHR_surface":
@@ -392,27 +535,31 @@ class TestVulkanSpecification(unittest.TestCase):
         self.assertEqual(count, 0)
     def test_init_should_pass_if_enable_deprecated_is_none(self) -> None:
         spec = VulkanSpecification(self._tmp_spec, "vulkan", "latest", set([ "all" ]), None)
-        count = 0
-        for name in spec.extensions():
-            if spec.extensions()[name].enabled():
-                count += 1
-        self.assertEqual(count, 2)
+        for extension in spec.extensions().values():
+            if extension.deprecated():
+                self.assertFalse(extension.enabled())
+            else:
+                self.assertTrue(extension.enabled())
 
 class TestDispatchTableGenerator(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp_dir = Path(tempfile.mkdtemp(prefix=TEMPORARY_PREFIX))
-        self._tmp_template = tmpfile(self._tmp_dir)
-        with open(self._tmp_template, "wb") as outfile:
+        self.__err = StringIO()
+        self.__redirect_stderr = contextlib.redirect_stderr(self.__err)
+        self.__redirect_stderr.__enter__()
+        self.__tmp_dir = Path(tempfile.mkdtemp(prefix=TEMPORARY_PREFIX))
+        self.__tmp_template = tmpfile(self.__tmp_dir)
+        with open(self.__tmp_template, "wb") as outfile:
             outfile.write(b"int main() {\n  return ${len(commands)};\n}")
-        self._tmp_spec = tmpfile(self._tmp_dir)
-        with open(self._tmp_spec, "wb") as outfile:
+        self.__tmp_spec = tmpfile(self.__tmp_dir)
+        with open(self.__tmp_spec, "wb") as outfile:
             outfile.write(TEMPORARY_SPEC.encode("utf-8"))
     def tearDown(self) -> None:
-        self._tmp_spec.unlink()
-        self._tmp_template.unlink()
-        for file in self._tmp_dir.iterdir():
+        self.__redirect_stderr.__exit__(None, None, None)
+        self.__tmp_spec.unlink()
+        self.__tmp_template.unlink()
+        for file in self.__tmp_dir.iterdir():
             file.unlink()
-        self._tmp_dir.rmdir()
+        self.__tmp_dir.rmdir()
     def test_init_should_fail_when_template_is_none(self) -> None:
         with self.assertRaises(FileNotFoundError):
             DispatchTableGenerator(None)
@@ -427,22 +574,50 @@ class TestDispatchTableGenerator(unittest.TestCase):
     def test_init_should_fail_when_output_isnt_a_file(self) -> None:
         with self.assertRaises(OSError):
             with tempfile.TemporaryDirectory(prefix=TEMPORARY_PREFIX) as tmpdir:
-                DispatchTableGenerator(self._tmp_template, False, Path(tmpdir))
+                DispatchTableGenerator(self.__tmp_template, False, Path(tmpdir))
     def test_init_should_fail_when_specification_doesnt_exist(self) -> None:
         with self.assertRaises(FileNotFoundError):
             doesnt_exist = Path(tempfile.gettempdir(), f"{tempfile.gettempprefix()}-vk.xml")
-            DispatchTableGenerator(self._tmp_template, False, None, doesnt_exist)
+            DispatchTableGenerator(self.__tmp_template, False, None, doesnt_exist)
     def test_init_should_fail_when_specification_isnt_a_file(self) -> None:
         with self.assertRaises(OSError):
             with tempfile.TemporaryDirectory(prefix=TEMPORARY_PREFIX) as tmpdir:
-                DispatchTableGenerator(self._tmp_template, False, None, Path(tmpdir))
+                DispatchTableGenerator(self.__tmp_template, False, None, Path(tmpdir))
     def test_run_should_produce_expected_output_given_a_template_and_specification(self) -> None:
-        output = tmpfile(self._tmp_dir)
-        app = DispatchTableGenerator(self._tmp_template, False, output, self._tmp_spec)
+        output = tmpfile(self.__tmp_dir)
+        app = DispatchTableGenerator(self.__tmp_template, False, output, self.__tmp_spec)
         app.run()
         with open(output, "rb") as infile:
             self.assertEqual(infile.read(), b"int main() {\n  return 7;\n}")
         output.unlink()
+    def test_run_should_fail_on_unmet_feature_dependency(self) -> None:
+        spec = tmpfile(self.__tmp_dir)
+        with open(spec, "wb") as outfile:
+            outfile.write(EVIL_SPEC_BAD_FEATURE_DEPENDENCY.encode("utf-8"))
+        with self.assertRaises(ValueError):
+            app = DispatchTableGenerator(self.__tmp_template, False, None, spec)
+            app.run()
+        spec.unlink()
+    def test_run_should_fail_on_unmet_extension_dependency(self) -> None:
+        spec = tmpfile(self.__tmp_dir)
+        with open(spec, "wb") as outfile:
+            outfile.write(EVIL_SPEC_BAD_DEPENDENCY.encode("utf-8"))
+        with self.assertRaises(ValueError):
+            app = DispatchTableGenerator(self.__tmp_template, False, None, spec)
+            app.run()
+        spec.unlink()
+    def test_run_should_pass_on_unmet_extension_requirement_dependency(self) -> None:
+        spec = tmpfile(self.__tmp_dir)
+        with open(spec, "wb") as outfile:
+            outfile.write(NEUTRAL_SPEC_BAD_REQUIREMENT_DEPENDENCY.encode("utf-8"))
+        res = ""
+        with StringIO() as out, contextlib.redirect_stdout(out):
+            app = DispatchTableGenerator(self.__tmp_template, False, None, spec)
+            app.run()
+            res = out.getvalue()
+        spec.unlink()
+        self.assertEqual(res, "int main() {\n  return 1;\n}")
+
 
 if __name__ == "__main__":
   unittest.main()

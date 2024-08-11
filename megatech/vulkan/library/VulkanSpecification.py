@@ -46,7 +46,7 @@ class VulkanSpecification:
             search_paths = [ Path(os.environ["VULKAN_SDK"]) ] if "VULKAN_SDK" in os.environ else [ ]
             if (sys.platform == "win32" or sys.platform == "cygwin"):
                 if "VULKAN_SDK_PATH" in os.environ:
-                    search_paths.append(Path(os.environ["VULKAN_SDK"]))
+                    search_paths.append(Path(os.environ["VULKAN_SDK_PATH"]))
             else:
                 search_paths.extend([ Path.home().joinpath(".local"), Path("/usr/local"), Path("/usr") ])
             for search_path in search_paths:

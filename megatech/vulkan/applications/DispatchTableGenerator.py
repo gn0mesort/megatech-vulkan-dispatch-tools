@@ -42,7 +42,7 @@ class Logger: #pragma: no cover
     def output_feature_verbose(self, feature: VulkanFeature, **kwargs) -> None:
         self.output_verbose(f"FEATURE: {feature.name()} v{feature.version()}", **kwargs)
         self.output_verbose(f"\tSUPPORTED FOR: {feature.supported_apis()}", **kwargs)
-        self.output_verbose(f"\tSELECTED: {feature.enabled()}", **kwargs)
+        self.output_verbose(f"\tDEPRECATED: {feature.deprecated()}", **kwargs)
         self.output_verbose(f"\tGUARD: {feature.to_header_guard()}", **kwargs)
     ##
     # @brief Format a VulkanCommand object to a string and print it to verbose output.
@@ -74,6 +74,7 @@ class DispatchTableGenerator:
     # @param template_arguments An arbitrary list strings that will be passed to the template during rendering.
     #                           Defaults to [ ].
     # @param enable_deprecated A flag indicating whether or not enable deprecated features. This is True by default.
+    # @param quiet A flag indicating whether or not to output warning messages.
     # @throws FileNotFoundError If the template path is None, if the template path doesn't exist, or if the
     #                           specification_path is not None and doesn't exist.
     # @throws OSError If the template path is not a file, if the output path exists and is not a file, or if the
@@ -81,7 +82,7 @@ class DispatchTableGenerator:
     def __init__(self, template_path: Path, verbose: bool = False, output_path: Path = None,
                  specification_path: Path = None, api_name: str = "vulkan", api_version: str = "latest",
                  extensions: set[str] = set([ "all" ]), template_arguments: list[str] = [ ],
-                 enable_deprecated: bool = True):
+                 enable_deprecated: bool = True, quiet = False):
         if template_path is None:
             raise FileNotFoundError("The template path cannot be empty.")
         elif not template_path.exists():
@@ -107,6 +108,7 @@ class DispatchTableGenerator:
         self.__extensions = extensions
         self.__template_arguments = template_arguments
         self.__enable_deprecated = enable_deprecated
+        self.__quiet = quiet
     def __enabled_features(self, specification: VulkanSpecification) -> set[str]:
         enabled = set()
         self.__logger.output_verbose("\nFEATURES:\n", file=sys.stderr)
@@ -140,7 +142,7 @@ class DispatchTableGenerator:
         # Process enabled features
         for name in enabled_features:
             feature = spec.features()[name]
-            if feature.deprecated():
+            if feature.deprecated() and not self.__quiet:
                 self.__logger.output(f"WARN: The feature \"{feature.name()}\" is deprecated.", file=sys.stderr)
             if not feature.is_satisfied(enabled):
                 raise ValueError(f"The Vulkan feature \"{feature.name()}\" has an unmet dependency.")
@@ -152,7 +154,7 @@ class DispatchTableGenerator:
         # Process enabled extensions
         for name in enabled_extensions:
             extension = spec.extensions()[name]
-            if extension.deprecated():
+            if extension.deprecated() and not self.__quiet:
                 self.__logger.output(f"WARN: The feature \"{extension.name()}\" is deprecated.", file=sys.stderr)
             if not extension.is_satisfied(enabled):
                 raise ValueError(f"The Vulkan extension \"{extension.name()}\" has an unmet dependency. The required "
@@ -163,7 +165,7 @@ class DispatchTableGenerator:
                         self.__logger.output_command_verbose(command, file=sys.stderr)
                         command_set.add(command)
                 # Warn the user if a requirement with commands is disabled automatically.
-                elif len(requirement.commands()) > 0:
+                elif len(requirement.commands()) > 0 and not self.__quiet:
                     self.__logger.output(f"WARN: In the extension \"{extension.name()}\", a requirement was disabled "
                                          f"because its dependency (\"{requirement.dependency()}\") was not satisfied.",
                                          file=sys.stderr)
@@ -176,7 +178,9 @@ class DispatchTableGenerator:
             extensions = spec.extensions()[name]
             for removal in extension.removals():
                 command_set.remove(command_set.find(removal))
-        source = b""
+        template = Template(filename=self.__template_path.absolute().as_posix(), output_encoding="utf-8")
+        source = template.render(commands=command_set, specification=spec, buildtime=datetime.now(UTC),
+                                 arguments=self.__template_arguments)
         if self.__output_path is not None:
             self.__logger.output_verbose(f"Writing output to \"{self.__output_path}\".")
             with open(self.__output_path, "wb") as outfile:
@@ -278,10 +282,13 @@ notes:
                         help="A comma separated list of arguments that will be passed through to the template.")
     parser.add_argument("--no-enable-deprecated", action="store_false", default=True,
                         help="Explicitly disable deprecated features.")
+    parser.add_argument("-q", "--quiet", action="store_true", default=False,
+                        help="Disable warning messages. This has no effect on verbose output.")
     parser.add_argument("INPUT", type=Path, help="A path to an input template file.")
     args = parser.parse_args()
     app = DispatchTableGenerator(args.INPUT, args.verbose, args.output, args.specification_path, args.api,
-                                 args.api_version, args.extensions, args.template_arguments, args.no_enable_deprecated)
+                                 args.api_version, args.extensions, args.template_arguments, args.no_enable_deprecated,
+                                 args.quiet)
     app.run()
 
 if __name__ == "__main__": # pragma: no cover

@@ -72,12 +72,6 @@ class Tokenizer:
         self.__begin = self.__end + 1
         self.__end = self.__begin
         return res
-    ##
-    # @brief Reset a Tokenizer to its initial state.
-    def reset(self) -> None:
-        self.__begin = 0
-        self.__end = 0
-        self.__stack = [ ]
 
 ##
 # @brief A Tokenizer that uses the `","` character as a terminator.
@@ -189,6 +183,8 @@ class VulkanRequirement:
     def __init__(self, node: ElementTree.Element, commands: dict[str, VulkanCommand]):
         if node is None:
             raise ValueError("The input node must be set.")
+        if commands is None:
+            raise ValueError("The input command dictionary must be set.")
         self.__commands = set()
         # Resolve Vulkan command names to objects
         for command in node.findall("command"):
@@ -211,6 +207,8 @@ class VulkanRequirement:
     def is_satisfied(self, features: set[str]) -> bool:
         if self.__dependency == "":
             return True
+        if features is None:
+            return False
         return _check_dependencies(self.__dependency, features)
     ##
     # @brief Retrieve a C-style header guard string that is equivalent to the VulkanRequirement's dependency.
@@ -348,15 +346,14 @@ class VulkanFeature:
     def is_satisfied(self, features: set[str]) -> bool:
         if self.__dependency == "":
             return True
+        if features is None:
+            return False
         return _check_dependencies(self.__dependency, features)
     ##
     # @brief Retrieve a C-style header guard string that is equivalent to the features's dependency.
     # @return A header guard string that is compatible with a C-style `#if` condition.
     def to_header_guard(self) -> str:
-        base = f"defined({self.__name})"
-        if self.__dependency != "":
-            return " && ".join([ base, _to_header_guard(self.__dependency) ])
-        return base
+        return _to_header_guard(self.__dependency)
     ##
     # @brief Determine whether or not this feature is deprecated.
     # @return True if the feature is deprecated. Otherwise False.
