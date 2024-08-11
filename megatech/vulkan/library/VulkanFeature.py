@@ -5,8 +5,139 @@
 # @date 2024
 # @copyright AGPL-3.0-or-later
 from .VulkanVersion import VulkanVersion
+from .VulkanCommand import VulkanCommand
 
+import re
 from xml.etree import ElementTree
+
+class Tokenizer:
+    def __init__(self, text: str):
+        if text is None:
+            raise ValueError("Tokenizer's cannot be constructed without data.")
+        self.__text = text
+        self.__stack = [ ]
+        self.__begin = 0
+        self.__end = 0
+        self._terminator = " "
+    def __consume(self) -> bool:
+        if self.__end >= len(self.__text):
+            if len(self.__stack) > 0:
+                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}.")
+            return False
+        if self.__text[self.__end] == "(":
+            self.__stack.append(self.__end)
+            self.__end += 1
+            return True
+        if self.__text[self.__end] == ")":
+            if len(self.__stack) < 1:
+                raise ValueError(f"The Tokenizer found an unmatched \")\" at the index {self.__end}.")
+            self.__stack.pop()
+            self.__end += 1
+            return True
+        if self.__text[self.__end] == self._terminator and len(self.__stack) < 1:
+            return False
+        if self.__end >= len(self.__text):
+            if len(self.__stack) > 0:
+                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}.")
+            return False
+        self.__end += 1
+        return True
+    def text(self) -> str:
+        return self.__text
+    def has_more_characters(self) -> bool:
+        return self.__text[self.__begin :] != ""
+    def next_token(self) -> str:
+        while self.__consume():
+            pass
+        res = self.__text[self.__begin : self.__end]
+        self.__begin = self.__end + 1
+        self.__end = self.__begin
+        return res
+    def reset(self) -> None:
+        self.__begin = 0
+        self.__end = 0
+        self.__stack = [ ]
+
+class CommaTokenizer(Tokenizer):
+    def __init__(self, text: str):
+        super().__init__(text)
+        self._terminator = ","
+
+class PlusTokenizer(Tokenizer):
+    def __init__(self, text: str):
+        super().__init__(text)
+        self._terminator = "+"
+
+def _tokenize(tokenizer: Tokenizer) -> list[str]:
+    tokens = [ ]
+    while tokenizer.has_more_characters():
+        tokens.append(tokenizer.next_token())
+    return tokens
+
+def _process_subtokens(subtoken: str, features: set[str]) -> bool:
+    res = [ ]
+    tokens = _tokenize(CommaTokenizer(subtoken))
+    if len(tokens) == 1:
+        tokens = _tokenize(PlusTokenizer(tokens[0]))
+        if len(tokens) == 1:
+            return tokens[0] in features
+        else:
+            for token in tokens:
+                if token.startswith("("):
+                    res.append(_process_subtokens(token[1 : len(token) - 1], features))
+                else:
+                    res.append(_process_subtokens(token, features))
+            return res.count(True) == len(res)
+    for token in tokens:
+        if token.startswith("("):
+            res.append(_process_subtokens(token[1 : len(token) - 1], features))
+        else:
+            res.append(_process_subtokens(token, features))
+    return True in res
+
+def _to_header_guard(subtoken: str) -> str:
+    res = [ ]
+    tokens = _tokenize(CommaTokenizer(subtoken))
+    if len(tokens) == 1:
+        tokens = _tokenize(PlusTokenizer(tokens[0]))
+        if len(tokens) == 1:
+            return f"defined({tokens[0]})"
+        else:
+            for token in tokens:
+                if token.startswith("("):
+                    res.append(f"({_to_header_guard(token[ 1: len(token) - 1])})")
+                else:
+                    res.append(_to_header_guard(token))
+            return " && ".join(res)
+    for token in tokens:
+        if token.startswith("("):
+            res.append(f"({_to_header_guard(token[1 : len(token) - 1])})")
+        else:
+            res.append(_to_header_guard(token))
+    return " || ".join(res)
+
+class VulkanRequirement:
+    def __init__(self, node: ElementTree.Element, commands: dict[str, VulkanCommand]):
+        if node is None:
+            raise ValueError("The input node must be set.")
+        self.__commands = set()
+        # Resolve Vulkan command names to objects
+        for command in node.findall("command"):
+            self.__commands.add(commands[command.get("name")])
+        self.__dependency = node.get("depends")
+        if self.__dependency is None:
+            self.__dependency = ""
+        self.__enabled = False
+    def commands(self) -> set[VulkanCommand]:
+        return self.__commands
+    def dependency(self) -> str:
+        return self._dependency
+    def is_satisfied(self, features: set[str]) -> bool:
+        if self.__dependency == "":
+            return True
+        return _process_subtokens(self.__dependency, features)
+    def to_header_guard(self) -> str:
+        return _to_header_guard(self.__dependency)
 
 ##
 # @brief A Vulkan feature as described by the API specification.
@@ -17,7 +148,7 @@ class VulkanFeature:
     # @brief Construct a new VulkanFeature from an XML node.
     # @param node The XML node representing the feature.
     # @throw ValueError If the XML node's tag is neither "feature" nor "extension".
-    def __init__(self, node: ElementTree.Element):
+    def __init__(self, node: ElementTree.Element, commands: dict[str, VulkanCommand]):
         self.__deprecated = node.get("deprecatedby")
         if node.tag == "feature":
             self.__name = node.get("name")
@@ -37,10 +168,11 @@ class VulkanFeature:
                 self.__version = VulkanVersion("0.0")
         else:
             raise ValueError(f"The tag \"{node.tag}\" is unrecognized.")
+        self.__dependency = node.get("depends", default="")
         self.__enabled = False
-        self.__commands = set()
-        for command in node.findall("require/command"):
-            self.__commands.add(command.get("name"))
+        self.__requirements = [ ]
+        for required in node.findall("require[command]"):
+            self.__requirements.append(VulkanRequirement(required, commands))
         self.__removals = set()
         for command in node.findall("remove/command"):
             self.__removals.add(command.get("name"))
@@ -87,20 +219,29 @@ class VulkanFeature:
     # @details All features are disabled by default.
     def disable(self) -> None:
         self.__enabled = False
-    ##
-    # @brief Retrieve a set of command names that are referenced by the feature.
-    # @return A set of command names.
-    def commands(self) -> set[str]:
-        return self.__commands
+
+    def requirements(self) -> list[VulkanRequirement]:
+        return self.__requirements
+    def dependency(self) -> set[str]:
+        return self.__dependency
     ##
     # @brief Retrieve a set of command names that are explicitly removed by the feature.
     # @return A set of command names.
     def removals(self) -> set[str]:
         return self.__removals
+    def is_satisfied(self, features: set[str]) -> bool:
+        if self.__dependency == "":
+            return True
+        return _process_subtokens(self.__dependency, features)
+    def to_header_guard(self) -> str:
+        base = f"defined({self.__name})"
+        if self.__dependency != "":
+            return " && ".join([ base, _to_header_guard(self.__dependency) ])
+        return base
     ##
     # @brief Determine whether or not this feature is deprecated.
     # @return True if the feature is deprecated. Otherwise False.
     def deprecated(self) -> bool:
         return bool(self.__deprecated)
 
-__all__ = [ "VulkanFeature" ]
+__all__ = [ "VulkanFeature", "VulkanRequirement" ]

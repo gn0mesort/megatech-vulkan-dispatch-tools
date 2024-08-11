@@ -78,7 +78,7 @@ class VulkanCommand:
     ##
     # @brief Hash a VulkanCommand.
     # @details This is useful for creating sets of VulkanCommands.
-    # @return The hash of the VulkanCommand's name (which must otherwise be unique in the specification.
+    # @return The hash of the VulkanCommand's name (which must otherwise be unique in the specification).
     def __hash__(self) -> int:
         return hash(self.__name)
     ##
@@ -103,12 +103,19 @@ class VulkanCommandSet:
     # @brief Constructs a new VulkanCommandSet without any commands in it.
     def __init__(self):
         self.__data = [ set(), set(), set() ]
+        self.__groups = { }
     ##
     # @brief Add a VulkanCommand to the set.
     # @details The command will be stored based on its level.
     # @param command The VulkanCommand to store.
     def add(self, command: VulkanCommand) -> None:
         self.__data[int(command.level())].add(command)
+    def find(self, name: str) -> VulkanCommand:
+        for commands in self.__data:
+            for command in commands:
+                if command.name() == name:
+                    return command
+        return None
     ##
     # @brief Remove a VulkanCommand from the set.
     # @details If the requested command is not present in the set then this is a noop.

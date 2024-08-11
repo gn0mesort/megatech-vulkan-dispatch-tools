@@ -34,7 +34,7 @@ class Logger: #pragma: no cover
     # @param **kwargs A list of keyword arguments that will get passed on during printing.
     def output_verbose(self, message: str, **kwargs) -> None:
         if self.__verbose:
-            print(message, **kwargs)
+            print(message, flush=True, **kwargs)
     ##
     # @brief Format a VulkanFeature object to a string and print it to verbose output.
     # @param feature The VulkanFeature to print.
@@ -43,6 +43,7 @@ class Logger: #pragma: no cover
         self.output_verbose(f"FEATURE: {feature.name()} v{feature.version()}", **kwargs)
         self.output_verbose(f"\tSUPPORTED FOR: {feature.supported_apis()}", **kwargs)
         self.output_verbose(f"\tSELECTED: {feature.enabled()}", **kwargs)
+        self.output_verbose(f"\tGUARD: {feature.to_header_guard()}", **kwargs)
     ##
     # @brief Format a VulkanCommand object to a string and print it to verbose output.
     # @param command The VulkanCommand to print.
@@ -106,6 +107,24 @@ class DispatchTableGenerator:
         self.__extensions = extensions
         self.__template_arguments = template_arguments
         self.__enable_deprecated = enable_deprecated
+    def __enabled_features(self, specification: VulkanSpecification) -> set[str]:
+        enabled = set()
+        self.__logger.output_verbose("\nFEATURES:\n", file=sys.stderr)
+        for name in sorted(specification.features()):
+            feature = specification.features()[name]
+            if feature.enabled():
+                enabled.add(feature.name())
+                self.__logger.output_feature_verbose(feature, file=sys.stderr)
+        return enabled
+    def __enabled_extensions(self, specification: VulkanSpecification) -> set[str]:
+        enabled = set()
+        self.__logger.output_verbose("\nEXTENSIONS:\n", file=sys.stderr)
+        for name in sorted(specification.extensions()):
+            extension = specification.extensions()[name]
+            if extension.enabled():
+                enabled.add(extension.name())
+                self.__logger.output_feature_verbose(extension, file=sys.stderr)
+        return enabled
     ##
     # @brief Run the application.
     def run(self) -> None:
@@ -113,43 +132,34 @@ class DispatchTableGenerator:
                                    self.__enable_deprecated)
         self.__logger.output_verbose(f"Vulkan specification version {spec.specification_version()} located at "
                                     f"\"{spec.specification_path()}\"", file=sys.stderr)
-        cmds = VulkanCommandSet()
-        for name in spec.apis():
-            api = spec.apis()[name]
-            self.__logger.output_feature_verbose(api, file=sys.stderr)
-            if api.enabled():
-                for name in api.commands():
-                    command = spec.commands()[name]
-                    cmds.add(command)
-        for name in spec.extensions():
+        enabled_features = self.__enabled_features(spec)
+        enabled_extensions = self.__enabled_extensions(spec)
+        enabled = enabled_features | enabled_extensions
+        command_set = VulkanCommandSet()
+        for name in enabled_features:
+            feature = spec.features()[name]
+            if not feature.is_satisfied(enabled):
+                raise ValueError(f"The Vulkan feature \"{feature.name()}\" has an unmet dependency.")
+            for requirement in feature.requirements():
+                if requirement.is_satisfied(enabled):
+                    for command in requirement.commands():
+                        self.__logger.output_command_verbose(command, file=sys.stderr)
+                        command_set.add(command)
+            for removal in feature.removals():
+                command_set.remove(command_set.find(removal))
+        for name in enabled_extensions:
             extension = spec.extensions()[name]
-            self.__logger.output_feature_verbose(extension, file=sys.stderr)
-            if extension.enabled():
-                for name in extension.commands():
-                    command = spec.commands()[name]
-                    cmds.add(command)
-        for name in spec.apis():
-            api = spec.apis()[name]
-            if api.enabled():
-                for name in api.removals():
-                    command = spec.commands()[name]
-                    cmds.remove(command)
-        for name in spec.extensions():
-            extension = spec.extensions()[name]
-            if extension.enabled():
-                for name in extension.removals():
-                    command = spec.commands()[name]
-                    cmds.remove(command)
-        for command in cmds.global_commands():
-            self.__logger.output_command_verbose(command, file=sys.stderr)
-        for command in cmds.instance_commands():
-            self.__logger.output_command_verbose(command, file=sys.stderr)
-        for command in cmds.device_commands():
-            self.__logger.output_command_verbose(command, file=sys.stderr)
-        self.__logger.output_verbose(f"Reading template from \"{self.__template_path.absolute()}\"", file=sys.stderr)
-        template = Template(filename=self.__template_path.absolute().as_posix(), output_encoding="utf-8")
-        source = template.render(commands=cmds, specification=spec, buildtime=datetime.now(UTC),
-                                 arguments=self.__template_arguments)
+            if not extension.is_satisfied(enabled):
+                raise ValueError(f"The Vulkan extension \"{extension.name()}\" has an unmet dependency. The required "
+                                 f"dependency is \"{extension.dependency()}\".")
+            for requirement in extension.requirements():
+                if requirement.is_satisfied(enabled):
+                    for command in requirement.commands():
+                        self.__logger.output_command_verbose(command, file=sys.stderr)
+                        command_set.add(command)
+            for removal in extension.removals():
+                command_set.remove(command_set.find(removal))
+        source = b""
         if self.__output_path is not None:
             self.__logger.output_verbose(f"Writing output to \"{self.__output_path}\".")
             with open(self.__output_path, "wb") as outfile:

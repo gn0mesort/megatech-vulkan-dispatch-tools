@@ -71,16 +71,16 @@ class VulkanSpecification:
             self.__commands[parsed.name()] = parsed
         # Parse out Vulkan APIs
         latest_api = VulkanVersion(api_version) if api_version != "latest" else None
-        self.__apis = { }
+        self.__features = { }
         for feature in tree.findall("feature"):
-            parsed = VulkanFeature(feature)
+            parsed = VulkanFeature(feature, self.__commands)
             if api in parsed.supported_apis() and (latest_api is None or parsed.version() <= latest_api):
                 parsed.enable()
-            self.__apis[parsed.name()] = parsed
+            self.__features[parsed.name()] = parsed
         # Parse out Vulkan Extensions
         self.__extensions = { }
         for feature in tree.findall("extensions/extension"):
-            parsed = VulkanFeature(feature)
+            parsed = VulkanFeature(feature, self.__commands)
             if api in parsed.supported_apis() and (parsed.name() in extensions or "all" in extensions):
                 deprecated = parsed.deprecated()
                 if not deprecated or (enable_deprecated and deprecated):
@@ -104,8 +104,8 @@ class VulkanSpecification:
     ##
     # @brief Retrieve a dictionary of API features.
     # @return A dictionary mapping API feature names to API features.
-    def apis(self) -> dict[str, VulkanFeature]:
-        return self.__apis
+    def features(self) -> dict[str, VulkanFeature]:
+        return self.__features
     ##
     # @brief Retrieve a dictionary of extension features.
     # @return A dictionary mapping extension feature names to extension features.
