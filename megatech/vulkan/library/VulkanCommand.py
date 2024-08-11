@@ -103,13 +103,16 @@ class VulkanCommandSet:
     # @brief Constructs a new VulkanCommandSet without any commands in it.
     def __init__(self):
         self.__data = [ set(), set(), set() ]
-        self.__groups = { }
     ##
     # @brief Add a VulkanCommand to the set.
     # @details The command will be stored based on its level.
     # @param command The VulkanCommand to store.
     def add(self, command: VulkanCommand) -> None:
         self.__data[int(command.level())].add(command)
+    ##
+    # @brief Retrieve a VulkanCommand from the set by its name.
+    # @param name The name of the VulkanCommand to find.
+    # @return A VulkanCommand matching the input name or `None` if the name is not found.
     def find(self, name: str) -> VulkanCommand:
         for commands in self.__data:
             for command in commands:
