@@ -136,8 +136,12 @@ class DispatchTableGenerator:
         enabled_extensions = self.__enabled_extensions(spec)
         enabled = enabled_features | enabled_extensions
         command_set = VulkanCommandSet()
+        self.__logger.output_verbose("\nCOMMANDS:\n", file=sys.stderr)
+        # Process enabled features
         for name in enabled_features:
             feature = spec.features()[name]
+            if feature.deprecated():
+                self.__logger.output(f"WARN: The feature \"{feature.name()}\" is deprecated.", file=sys.stderr)
             if not feature.is_satisfied(enabled):
                 raise ValueError(f"The Vulkan feature \"{feature.name()}\" has an unmet dependency.")
             for requirement in feature.requirements():
@@ -145,10 +149,11 @@ class DispatchTableGenerator:
                     for command in requirement.commands():
                         self.__logger.output_command_verbose(command, file=sys.stderr)
                         command_set.add(command)
-            for removal in feature.removals():
-                command_set.remove(command_set.find(removal))
+        # Process enabled extensions
         for name in enabled_extensions:
             extension = spec.extensions()[name]
+            if extension.deprecated():
+                self.__logger.output(f"WARN: The feature \"{extension.name()}\" is deprecated.", file=sys.stderr)
             if not extension.is_satisfied(enabled):
                 raise ValueError(f"The Vulkan extension \"{extension.name()}\" has an unmet dependency. The required "
                                  f"dependency is \"{extension.dependency()}\".")
@@ -157,6 +162,18 @@ class DispatchTableGenerator:
                     for command in requirement.commands():
                         self.__logger.output_command_verbose(command, file=sys.stderr)
                         command_set.add(command)
+                # Warn the user if a requirement with commands is disabled automatically.
+                elif len(requirement.commands()) > 0:
+                    self.__logger.output(f"WARN: In the extension \"{extension.name()}\", a requirement was disabled "
+                                         f"because its dependency (\"{requirement.dependency()}\") was not satisfied.",
+                                         file=sys.stderr)
+        # Removals must be processed after everything is added. :(
+        for name in enabled_features:
+            feature = spec.features()[name]
+            for removal in feature.removals():
+                command_set.remove(command_set.find(removal))
+        for name in enabled_extensions:
+            extensions = spec.extensions()[name]
             for removal in extension.removals():
                 command_set.remove(command_set.find(removal))
         source = b""

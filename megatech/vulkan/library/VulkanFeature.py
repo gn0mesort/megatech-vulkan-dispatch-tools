@@ -203,7 +203,7 @@ class VulkanRequirement:
     # @brief Retrieve the VulkanRequirement's dependency string.
     # @return A Vulkan dependency string or the empty string. Empty strings represent unconditional requirements.
     def dependency(self) -> str:
-        return self._dependency
+        return self.__dependency
     ##
     # @brief Determine whether or not the VulkanRequirement's dependency is satisfied.
     # @param features A `set[str]` of enabled Vulkan feature names.
