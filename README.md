@@ -1,26 +1,59 @@
 # Megatech Vulkan Dispatch Python Tools
 
-The script used to generate headers for [`libmegatech-vulkan-dispatch`](https://github.com/gn0mesort/megatech-vulkan-dispatch) is a stand-alone component. Although my
-intention is that client software links with that library, there's no need to do so. Actually, the generator doesn't
-even need to be used to create <span class="nowrap">C++</span> headers.
+Tools for generating [Vulkan](https://registry.khronos.org/vulkan/) command dispatch tables using
+[Mako](https://makotemplates.org) templates
 
-The `dispatch-table-generator` script simply accepts a [Mako](https://www.makotemplates.org/) template as input. The
-input template is provided with the following:
+## Library
 
-- `commands`: A [VulkanCommandSet](#megatech.vulkan.library.VulkanCommand.VulkanCommandSet) object containing the
-              global, instance, and device [VulkanCommand](#megatech.vulkan.library.VulkanCommand.VulkanCommand)s
-              selected by the generator.
-- `specification`: A [VulkanSpecification](#megatech.vulkan.library.VulkanSpecification.VulkanSpecification) object
-                   containing a parsed Vulkan XML specification.
-- `builddate`: A `datetime` object containing the current time in UTC when template rendering started.
-- `arguments`: A `list[str]` containing arbitrary template arguments passed to the generator.
+```python
+from megatech.vulkan import VulkanSpecification, VulkanCommandSet
+```
 
-The template file can leverage these parameters as it sees fit.
+`megatech-vulkan-dispatch-tools` provides a library for locating and parsing
+[Vulkan XML specifications](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml/vk.xml). Currently,
+this package is focused on dispatch rather than, for example, generating custom `vulkan.h` files. This means that the
+library is not aware of concepts like types or enumerations. Instead, it focuses on extracting features
+(i.e., Vulkan API versions), extensions, and commands.
 
-For more information on how to run `dispatch-table-generator`, use:
+The primary way to use this library is by instantiating a `VulkanSpecification` object. `VulkanSpecification`s allow
+clients to locate a Vulkan XML specification (either explicitly or by searching a set of system dependent locations)
+and access the information contained within. `VulkanSpecification`s can also help filter Vulkan features by
+marking each feature and extension as enabled or disabled.
+
+
+## dispatch-table-generator
+
+The main use-case for the `megatech.vulkan` library is to support `dispatch-table-generator`.
+`dispatch-table-generator` is a simple script for templating files with information from the Vulkan specification.
+As its name implies, the primary purpose of this is to generate Vulkan command dispatch tables. However, since it
+processes Mako templates the exact output is very flexible. The main purpose of this application is to support my
+[megatech-vulkan-dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch) library.
+
+For more information about this script you can run:
 
 ```sh
-dispatch-table-generator --help
+dispatch-table-generator -h
+```
+
+### Template API
+
+Currently, `dispatch-table-generator` passes the following objects to its input template:
+
+- `arguments`: A list of strings, provided by the user, that are passed directly through from
+  `dispatch-table-generator`. It is the responsibility of the template to determine their meaning.
+- `commands`: A `VulkanCommandSet` that contains all of the Vulkan commands required by the currently enabled
+  features.
+- `groups`: A dictionary that maps command groups to sets of `VulkanCommand` objects. A command group is condition
+  describing the set of features that must be enabled for the corresponding commands to function. Each group string
+  is formatted as a C-style `#if` condition.
+- `specification`: The `VulkanSpecification` object generated internally by the application.
+- `buildtime`: A `datetime` object representing the start time of the template renderer in UTC.
+
+## Testing
+
+```sh
+python3 -m pip install .[tests]
+coverage run
 ```
 
 ## Generating Documentation

@@ -254,6 +254,9 @@ templates:
 \t\tA list of strings containing any values passed to the \"--template-arguments\" option.
 \tcommands:
 \t\tA VulkanCommandSet containing VulkanCommand objects for every enabled command.
+\tgroups:
+\t\tA dictionary that maps Vulkan command groups to sets of VulkanCommand objects.
+\t\tCommand groups are C-style \"#if\" conditions that would conditionally include symbols for the associated commands.
 \tspecification:
 \t\tA VulkanSpecification representing the parsed specification.
 \tbuildtime:
