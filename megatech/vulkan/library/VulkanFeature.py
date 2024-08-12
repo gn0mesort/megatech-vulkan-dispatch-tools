@@ -7,7 +7,6 @@
 from .VulkanVersion import VulkanVersion
 from .VulkanCommand import VulkanCommand
 
-import re
 from xml.etree import ElementTree
 
 ### @cond INTERNAL
@@ -214,6 +213,8 @@ class VulkanRequirement:
     # @brief Retrieve a C-style header guard string that is equivalent to the VulkanRequirement's dependency.
     # @return A header guard string that is compatible with a C-style `#if` condition.
     def to_header_guard(self) -> str:
+        if self.__dependency == "":
+            return ""
         return _to_header_guard(self.__dependency)
 
 ##
@@ -353,6 +354,8 @@ class VulkanFeature:
     # @brief Retrieve a C-style header guard string that is equivalent to the features's dependency.
     # @return A header guard string that is compatible with a C-style `#if` condition.
     def to_header_guard(self) -> str:
+        if self.__dependency == "":
+            return ""
         return _to_header_guard(self.__dependency)
     ##
     # @brief Determine whether or not this feature is deprecated.

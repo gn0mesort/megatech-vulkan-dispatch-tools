@@ -142,6 +142,11 @@ class VulkanCommandSet:
     def device_commands(self) -> set[VulkanCommand]:
         return self.__data[int(VulkanCommandLevel.DEVICE)]
     ##
+    # @brief Retrieve the set of all commands from the command set.
+    # @return A set of VulkanCommands containing every command in the VulkanCommandSet
+    def all_commands(self) -> set[VulkanCommand]:
+        return self.__data[0] | self.__data[1] | self.__data[2]
+    ##
     # @brief Determine if the command set is empty.
     # @return True if the set is empty. Otherwise False.
     def empty(self) -> bool:

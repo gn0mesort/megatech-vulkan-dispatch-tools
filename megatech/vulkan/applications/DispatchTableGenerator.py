@@ -139,6 +139,7 @@ class DispatchTableGenerator:
         enabled = enabled_features | enabled_extensions
         command_set = VulkanCommandSet()
         self.__logger.output_verbose("\nCOMMANDS:\n", file=sys.stderr)
+        command_groups = dict()
         # Process enabled features
         for name in enabled_features:
             feature = spec.features()[name]
@@ -148,9 +149,15 @@ class DispatchTableGenerator:
                 raise ValueError(f"The Vulkan feature \"{feature.name()}\" has an unmet dependency.")
             for requirement in feature.requirements():
                 if requirement.is_satisfied(enabled):
+                    group = f"defined({feature.name()})"
+                    if requirement.dependency() != "":
+                        group += f" && ({requirement.to_header_guard()})"
                     for command in requirement.commands():
                         self.__logger.output_command_verbose(command, file=sys.stderr)
                         command_set.add(command)
+                        if not command in command_groups:
+                            command_groups[command] = set()
+                        command_groups[command].add(f"({group})")
         # Process enabled extensions
         for name in enabled_extensions:
             extension = spec.extensions()[name]
@@ -161,9 +168,15 @@ class DispatchTableGenerator:
                                  f"dependency is \"{extension.dependency()}\".")
             for requirement in extension.requirements():
                 if requirement.is_satisfied(enabled):
+                    group = f"defined({extension.name()})"
+                    if requirement.dependency() != "":
+                        group += f" && ({requirement.to_header_guard()})"
                     for command in requirement.commands():
                         self.__logger.output_command_verbose(command, file=sys.stderr)
                         command_set.add(command)
+                        if not command in command_groups:
+                            command_groups[command] = set()
+                        command_groups[command].add(f"({group})")
                 # Warn the user if a requirement with commands is disabled automatically.
                 elif len(requirement.commands()) > 0 and not self.__quiet:
                     self.__logger.output(f"WARN: In the extension \"{extension.name()}\", a requirement was disabled "
@@ -178,8 +191,15 @@ class DispatchTableGenerator:
             extensions = spec.extensions()[name]
             for removal in extension.removals():
                 command_set.remove(command_set.find(removal))
+        # Process command groups
+        groups = dict()
+        for command in command_set.all_commands():
+            group = " || ".join(command_groups[command])
+            if not group in groups:
+                groups[group] = set()
+            groups[group].add(command)
         template = Template(filename=self.__template_path.absolute().as_posix(), output_encoding="utf-8")
-        source = template.render(commands=command_set, specification=spec, buildtime=datetime.now(UTC),
+        source = template.render(commands=command_set, groups=groups, specification=spec, buildtime=datetime.now(UTC),
                                  arguments=self.__template_arguments)
         if self.__output_path is not None:
             self.__logger.output_verbose(f"Writing output to \"{self.__output_path}\".")
