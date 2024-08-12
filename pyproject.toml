@@ -7,7 +7,6 @@ authors = [
 ]
 description = "Python tools for the Megatech Vulkan Dispatch library"
 readme = "README.md"
-license = { file = "LICENSE" }
 dependencies = [
   "importlib-metadata; python_version<'3.10'",
   "defusedxml>0.7.0",
