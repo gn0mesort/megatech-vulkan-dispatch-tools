@@ -1,7 +1,11 @@
-# Megatech Vulkan Dispatch Python Tools
+# Megatech Vulkan Dispatch Tools
 
-Tools for generating [Vulkan](https://registry.khronos.org/vulkan/) command dispatch tables using
-[Mako](https://makotemplates.org) templates
+```sh
+python3 -m pip install .[tests]
+```
+
+This repository contains tools for my [Megatech Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
+library. Currently, those tools are a support library and a generator script both written in Python 3.
 
 ## Library
 
@@ -9,31 +13,30 @@ Tools for generating [Vulkan](https://registry.khronos.org/vulkan/) command disp
 from megatech.vulkan import VulkanSpecification, VulkanCommandSet
 ```
 
-`megatech-vulkan-dispatch-tools` provides a library for locating and parsing
-[Vulkan XML specifications](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml/vk.xml). Currently,
-this package is focused on dispatch rather than, for example, generating custom `vulkan.h` files. This means that the
-library is not aware of concepts like types or enumerations. Instead, it focuses on extracting features
-(i.e., Vulkan API versions), extensions, and commands.
+The library consists of several objects that are useful in parsing
+[Vulkan XML specifications](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml/vk.xml). However, not all of
+the specification is exposed through the library. Since these tools are focused on the generation of dispatch tables,
+the library only really exposes Vulkan features, extensions, and commands. Basically, only the minimum amount of the
+specification is actually exposed. For example, the library can't be used to generate a complete copy of
+`vulkan_core.h`.
 
-The primary way to use this library is by instantiating a `VulkanSpecification` object. `VulkanSpecification`s allow
-clients to locate a Vulkan XML specification (either explicitly or by searching a set of system dependent locations)
-and access the information contained within. `VulkanSpecification`s can also help filter Vulkan features by
-marking each feature and extension as enabled or disabled.
-
+The main way to use the library is to instantiate a `VulkanSpecification` object. This will locate an XML
+specification and parse it. I've made an effort to use a "safe" XML parser for this. However, you should still be
+careful with it. You probably shouldn't parse arbitrary XML files that you found somewhere or other. Instead, you
+should provide an explicit path to a known-good specification or you should allow the library to locate a
+specification in a trusted system-controlled location (i.e., a specification installed by a package manager).
 
 ## dispatch-table-generator
-
-The main use-case for the `megatech.vulkan` library is to support `dispatch-table-generator`.
-`dispatch-table-generator` is a simple script for templating files with information from the Vulkan specification.
-As its name implies, the primary purpose of this is to generate Vulkan command dispatch tables. However, since it
-processes Mako templates the exact output is very flexible. The main purpose of this application is to support my
-[megatech-vulkan-dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch) library.
-
-For more information about this script you can run:
 
 ```sh
 dispatch-table-generator -h
 ```
+
+To support generating dispatch tables, this repository provides an application that uses
+`megatech.vulkan.VulkanSpecification` to parameterize a [Mako](https://www.makotemplates.org/) template. This means
+that, despite its name, `dispatch-table-generator` can actually process all kinds of templates. Mako templates are
+computer programs, like it or not, and so, you must take care in validating their behavior before rendering them.
+The application makes no attempt to differentiate between safe and unsafe templates.
 
 ### Template API
 
@@ -52,19 +55,21 @@ Currently, `dispatch-table-generator` passes the following objects to its input 
 ## Testing
 
 ```sh
-python3 -m pip install .[tests]
 coverage run
 ```
 
-## Generating Documentation
+Assuming that you've installed the optional `tests` dependencies, you can use `coverage` to run the library tests and
+generate a coverage report.
 
-Documentation files can be generated using [Doxygen](https://www.doxygen.nl/). Just run:
+## Generating Documentation
 
 ```sh
 doxygen Doxyfile
 ```
 
-The resulting documentation is located at `build/documentation/`.
+I've provided a [Doxygen](https://doxygen.nl/) configuration file in this repository. You can use this to extract the
+inline API documentation and build HTML documentation from it. The HTML documentation will be written to
+`build/documentation`.
 
 ## Licensing
 
