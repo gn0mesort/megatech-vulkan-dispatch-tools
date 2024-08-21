@@ -37,7 +37,7 @@ dispatch-table-generator -h
 To support generating dispatch tables, this repository provides an application that uses
 `megatech.vulkan.VulkanSpecification` to parameterize a [Mako](https://www.makotemplates.org/) template. This means
 that, despite its name, `dispatch-table-generator` can actually process all kinds of templates. Mako templates are
-computer programs, like it or not, and so, you must take care in validating their behavior before rendering them.
+computer programs, like it or not, and so you must take care in validating their behavior before rendering them.
 The application makes no attempt to differentiate between safe and unsafe templates. Basically, don't pull random
 templates off the Web and render them. Doing so is identical to executing untrusted Python scripts you find online.
 
