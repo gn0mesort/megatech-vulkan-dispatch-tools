@@ -5,7 +5,9 @@ python3 -m pip install .[tests]
 ```
 
 This repository contains tools for my [Megatech Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
-library. Currently, those tools are a support library and a generator script both written in Python 3.
+library. Currently, those tools are a support library and a generator script both written in Python 3. This project
+is similar to, but distinct from, the generator tools provided with my previous project
+[VKFL](https://github.com/gn0mesort/vkfl).
 
 ## Library
 
@@ -36,7 +38,8 @@ To support generating dispatch tables, this repository provides an application t
 `megatech.vulkan.VulkanSpecification` to parameterize a [Mako](https://www.makotemplates.org/) template. This means
 that, despite its name, `dispatch-table-generator` can actually process all kinds of templates. Mako templates are
 computer programs, like it or not, and so, you must take care in validating their behavior before rendering them.
-The application makes no attempt to differentiate between safe and unsafe templates.
+The application makes no attempt to differentiate between safe and unsafe templates. Basically, don't pull random
+templates off the Web and render them. Doing so is identical to executing untrusted Python scripts you find online.
 
 ### Template API
 
@@ -51,6 +54,15 @@ Currently, `dispatch-table-generator` passes the following objects to its input 
   is formatted as a C-style `#if` condition.
 - `specification`: The `VulkanSpecification` object generated internally by the application.
 - `buildtime`: A `datetime` object representing the start time of the template renderer in UTC.
+
+## Support For Vulkan SC
+
+In theory, the library and `dispatch-table-generator` should properly handle the
+[Vulkan Security Critical](https://www.khronos.org/vulkansc/) API. Invoking `dispatch-table-generator --api=vulkansc`
+should properly extract only the Vulkan SC API. However, I haven't really tested this. Therefore, I think it's
+important to say that support for this is experimental at best. Vulkan SC is outside the scope of what I'm doing with
+Vulkan at the moment. The only reason I've exposed this feature is that handling it became necessary to properly parse
+the XML specification after the introduction of Vulkan SC.
 
 ## Testing
 
