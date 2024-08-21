@@ -1,7 +1,7 @@
 ##
 # @file VulkanFeature.py
 # @brief Vulkan Feature Objects
-# @author Alexander Rothman <gnomesort@megate.ch>
+# @author Alexander Rothman <[gnomesort@megate.ch](mailto:gnomesort@megate.ch)>
 # @date 2024
 # @copyright AGPL-3.0-or-later
 from .VulkanVersion import VulkanVersion

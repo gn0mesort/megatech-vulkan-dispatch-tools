@@ -1,7 +1,7 @@
 ##
 # @file DispatchTableGenerator.py
 # @brief Dispatch Table Generator Application Implementation
-# @author Alexander Rothman <gnomesort@megate.ch>
+# @author Alexander Rothman <[gnomesort@megate.ch](mailto:gnomesort@megate.ch)>
 # @date 2024
 # @copyright AGPL-3.0-or-later
 from argparse import ArgumentParser, Action, RawDescriptionHelpFormatter
