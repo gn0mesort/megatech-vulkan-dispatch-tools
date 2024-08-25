@@ -1,6 +1,6 @@
 # Megatech Vulkan Dispatch Tools
 
-This repository contains tools for my [Megatech Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
+This repository contains tools for my [Megatech-Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
 library. Currently, those tools are a support library and a generator script both written in Python 3. This project
 is similar to, but distinct from, the generator tools provided with my previous project
 [VKFL](https://github.com/gn0mesort/vkfl).
