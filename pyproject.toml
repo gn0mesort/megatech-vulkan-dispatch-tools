@@ -1,0 +1,34 @@
+[project]
+name = "megatech-vulkan-dispatch-tools"
+license = { file = "LICENSE" }
+version = "1.0.0"
+authors = [
+  { name = "Alexander Rothman", email= "gnomesort@megate.ch" }
+]
+description = "Python tools for the Megatech Vulkan Dispatch library"
+readme = "README.md"
+dependencies = [
+  "importlib-metadata; python_version<'3.10'",
+  "defusedxml>0.7.0",
+  "Mako>1.3.0"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Code Generators",
+  "Programming Language :: Python :: 3.12"
+]
+[project.optional-dependencies]
+tests = [
+  "coverage >= 7.6.0"
+]
+[project.scripts]
+dispatch-table-generator = "megatech.vulkan.applications.DispatchTableGenerator:main"
+[tool.coverage.run]
+branch = true
+include = [ "megatech/*" ]
+command_line = "-m unittest discover -s tests/"
+[tool.coverage.report]
+show_missing = true
