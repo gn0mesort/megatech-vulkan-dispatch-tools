@@ -1,7 +1,7 @@
 [project]
 name = "megatech-vulkan-dispatch-tools"
 license = { file = "LICENSE" }
-version = "0.0.0-alpha1"
+version = "1.0.0"
 authors = [
   { name = "Alexander Rothman", email= "gnomesort@megate.ch" }
 ]

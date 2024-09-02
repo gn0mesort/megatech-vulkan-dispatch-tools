@@ -1,28 +1,44 @@
-# Megatech Vulkan Dispatch Tools
+# Megatech-Vulkan Dispatch Tools
 
-```sh
-python3 -m pip install .[tests]
-```
-
-This repository contains tools for my [Megatech Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
+This repository contains tools for my [Megatech-Vulkan Dispatch](https://github.com/gn0mesort/megatech-vulkan-dispatch)
 library. Currently, those tools are a support library and a generator script both written in Python 3. This project
 is similar to, but distinct from, the generator tools provided with my previous project
 [VKFL](https://github.com/gn0mesort/vkfl).
 
+## Installing
+
+```sh
+# Install directly from a local copy to your Python environment.
+python3 -m pip install .
+
+# Install with the additional testing dependencies.
+python3 -m pip install .[tests]
+
+# Install from the remote Git repository.
+python3 -m pip install "megatech-vulkan-dispatch-tools @ git+https://github.com/gn0mesort/megatech-vulkan-dispatch-tools"
+
+# Install from the remote Git repository with the additional testing dependencies.
+python3 -m pip install "megatech-vulkan-dispatch-tools[tests] @ git+https://github.com/gn0mesort/megatech-vulkan-dispatch-tools"
+```
+
+You should install this package using [`pip`](https://pip.pypa.io/en/stable/). Please refer to the `pip`
+[documentation](https://pip.pypa.io/en/stable/user_guide/) for more details.
+
 ## Library
 
 ```python
+# Import the useful bits.
 from megatech.vulkan import VulkanSpecification, VulkanCommandSet
 ```
 
-The library consists of several objects that are useful in parsing
+The library consists of several objects that are useful for parsing
 [Vulkan XML specifications](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml/vk.xml). However, not all of
 the specification is exposed through the library. Since these tools are focused on the generation of dispatch tables,
-the library only really exposes Vulkan features, extensions, and commands. Basically, only the minimum amount of the
-specification is actually exposed. For example, the library can't be used to generate a complete copy of
-`vulkan_core.h`.
+the library only exposes Vulkan features (i.e, API versions), extensions, and commands. Basically, only the absolute
+minimum information from the specification is exposed by this library. For example, the library can't be used to
+generate a complete copy of `vulkan_core.h`.
 
-The main way to use the library is to instantiate a `VulkanSpecification` object. This will locate an XML
+The main way to use this library is to instantiate a `VulkanSpecification` object. This will locate an XML
 specification and parse it. I've made an effort to use a "safe" XML parser for this. However, you should still be
 careful with it. You probably shouldn't parse arbitrary XML files that you found somewhere or other. Instead, you
 should provide an explicit path to a known-good specification or you should allow the library to locate a
@@ -31,6 +47,7 @@ specification in a trusted system-controlled location (i.e., a specification ins
 ## dispatch-table-generator
 
 ```sh
+# Display usage information for the generator.
 dispatch-table-generator -h
 ```
 
@@ -59,23 +76,28 @@ Currently, `dispatch-table-generator` passes the following objects to its input 
 
 In theory, the library and `dispatch-table-generator` should properly handle the
 [Vulkan Security Critical](https://www.khronos.org/vulkansc/) API. Invoking `dispatch-table-generator --api=vulkansc`
-should properly extract only the Vulkan SC API. However, I haven't really tested this. Therefore, I think it's
-important to say that support for this is experimental at best. Vulkan SC is outside the scope of what I'm doing with
-Vulkan at the moment. The only reason I've exposed this feature is that handling it became necessary to properly parse
-the XML specification after the introduction of Vulkan SC.
+**should** properly extract only the Vulkan SC API. However, I haven't really tested this. Therefore, support for
+Vulkan SC is experimental at best.
+
+When Vulkan SC was added to the Vulkan XML specification, it became necessary for `VulkanSpecification` to
+differentiate between API features that are only available in Vulkan or Vulkan SC. Since `VulkanSpecification` must
+support this to correctly enable features, I've exposed the ability to select the desired API in
+`dispatch-table-generator`. Again though, I haven't tested whether or not selecting Vulkan SC works correctly.
 
 ## Testing
 
 ```sh
+# Run the library's tests and generate coverage information.
 coverage run
 ```
 
-Assuming that you've installed the optional `tests` dependencies, you can use `coverage` to run the library tests and
-generate a coverage report.
+Assuming that you've installed the optional `tests` dependencies, you can use
+[`coverage`](https://coverage.readthedocs.io/en/7.6.1/) to run the library tests and generate a coverage report.
 
 ## Generating Documentation
 
 ```sh
+# Generate HTML documentation.
 doxygen Doxyfile
 ```
 
