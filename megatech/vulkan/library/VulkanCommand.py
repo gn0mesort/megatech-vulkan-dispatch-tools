@@ -61,7 +61,7 @@ class VulkanCommand:
             owner = node.findtext("param[1]/type")
             if owner in ("VkInstance", "VkPhysicalDevice"):
                 self.__level = VulkanCommandLevel.INSTANCE
-            elif owner in ("VkDevice", "VkCommandBuffer", "VkQueue"):
+            elif owner in ("VkDevice", "VkCommandBuffer", "VkQueue", "VkExternalComputeQueueNV"):
                 self.__level = VulkanCommandLevel.DEVICE
             else:
                 raise ValueError(f"The command \"{self.__name}\" appears to have no level.")
