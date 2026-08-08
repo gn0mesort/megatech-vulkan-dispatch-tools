@@ -30,7 +30,7 @@ class Tokenizer:
     def __consume(self) -> bool:
         if self.__end >= len(self.__text):
             if len(self.__stack) > 0:
-                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}.")
+                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}. Text: {self.__text}")
             return False
         if self.__text[self.__end] == "(":
             self.__stack.append(self.__end)
@@ -38,7 +38,7 @@ class Tokenizer:
             return True
         if self.__text[self.__end] == ")":
             if len(self.__stack) < 1:
-                raise ValueError(f"The Tokenizer found an unmatched \")\" at the index {self.__end}.")
+                raise ValueError(f"The Tokenizer found an unmatched \")\" at the index {self.__end}. Text: {self.__text}")
             self.__stack.pop()
             self.__end += 1
             return True
@@ -46,7 +46,7 @@ class Tokenizer:
             return False
         if self.__end >= len(self.__text):
             if len(self.__stack) > 0:
-                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}.")
+                raise ValueError(f"The Tokenizer found an unmatched \"(\" at the index {self.__stack[-1]}. Text: {self.__text}")
             return False
         self.__end += 1
         return True
@@ -113,17 +113,30 @@ def _tokenize(tokenizer: Tokenizer) -> list[str]:
 def _check_dependencies_loop(tokens: list[str], features: set[str]) -> list[bool]:
     res = [ ]
     for token in tokens:
-        if token.startswith("("):
-            res.append(_check_dependencies(token[1 : len(token) - 1], features))
-        else:
             res.append(_check_dependencies(token, features))
     return res
+
+def _contains_outer_parentheses(token: str) -> bool:
+    if not token or token[0] != "(" or token[-1] != ")":
+        return False
+    depth = 0
+    for i, c in enumerate(token):
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if not depth and i != len(token) - 1:
+                return False
+    return depth == 0
+
 ##
 # @brief Check a Vulkan dependency.
 # @param token A string containing the dependency to check.
 # @param features A `set[str]` containing the names of all enabled Vulkan features.
 # @return `True` if the dependency is satisfied. Otherwise `False`.
 def _check_dependencies(token: str, features: set[str]) -> bool:
+    if _contains_outer_parentheses(token):
+        token = token[1:-1]
     tokens = _tokenize(CommaTokenizer(token))
     if len(tokens) == 1:
         tokens = _tokenize(PlusTokenizer(tokens[0]))
@@ -143,10 +156,7 @@ def _check_dependencies(token: str, features: set[str]) -> bool:
 def _to_header_guard_loop(tokens: list[str]) -> list[str]:
     res = [ ]
     for token in tokens:
-        if token.startswith("("):
-            res.append(f"({_to_header_guard(token[1 : len(token) - 1])})")
-        else:
-            res.append(_to_header_guard(token))
+        res.append(_to_header_guard(token))
     return res
 
 ##
@@ -154,14 +164,22 @@ def _to_header_guard_loop(tokens: list[str]) -> list[str]:
 # @param tokens A `list[str]` of input tokens.
 # @return A string of header guard conditions suitable for use in a C-style `#if` condition.
 def _to_header_guard(subtoken: str) -> str:
+    outer = _contains_outer_parentheses(subtoken)
+    if outer:
+        subtoken = subtoken[1:-1]
     tokens = _tokenize(CommaTokenizer(subtoken))
+    res = None
     if len(tokens) == 1:
         tokens = _tokenize(PlusTokenizer(tokens[0]))
         if len(tokens) == 1:
-            return f"defined({tokens[0]})"
+            res = f"defined({tokens[0]})"
         else:
-            return " && ".join(_to_header_guard_loop(tokens))
-    return " || ".join(_to_header_guard_loop(tokens))
+            res = " && ".join(_to_header_guard_loop(tokens))
+    if not res:
+        res = " || ".join(_to_header_guard_loop(tokens))
+    if outer:
+        return f"({res})"
+    return res
 ### @endcond
 
 ##
